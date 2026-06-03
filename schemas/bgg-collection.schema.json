@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bgg-shelf:schemas:collection",
+  "title": "BggCollection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["generatedAt", "sourceUsername", "games"],
+  "properties": {
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sourceUsername": { "type": "string", "minLength": 1 },
+    "games": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/game" }
+    }
+  },
+  "$defs": {
+    "game": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "addedAt",
+        "yearPublished",
+        "image",
+        "thumbnail",
+        "minPlayers",
+        "maxPlayers",
+        "recommendedPlayerCounts",
+        "bestPlayerCounts",
+        "playingTime",
+        "minPlayTime",
+        "maxPlayTime",
+        "weight",
+        "averageRating",
+        "bayesAverage",
+        "rank",
+        "userRating",
+        "owned",
+        "isExpansion",
+        "categories",
+        "mechanics"
+      ],
+      "properties": {
+        "id": { "type": "integer" },
+        "name": { "type": "string", "minLength": 1 },
+        "addedAt": { "type": ["string", "null"] },
+        "yearPublished": { "type": ["integer", "null"] },
+        "image": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "minPlayers": { "type": ["integer", "null"] },
+        "maxPlayers": { "type": ["integer", "null"] },
+        "recommendedPlayerCounts": {
+          "type": "array",
+          "items": { "type": "integer" }
+        },
+        "bestPlayerCounts": {
+          "type": "array",
+          "items": { "type": "integer" }
+        },
+        "playingTime": { "type": ["integer", "null"] },
+        "minPlayTime": { "type": ["integer", "null"] },
+        "maxPlayTime": { "type": ["integer", "null"] },
+        "weight": { "type": ["number", "null"] },
+        "averageRating": { "type": ["number", "null"] },
+        "bayesAverage": { "type": ["number", "null"] },
+        "rank": { "type": ["integer", "null"] },
+        "userRating": { "type": ["number", "null"] },
+        "owned": { "type": "boolean" },
+        "isExpansion": { "type": "boolean" },
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "mechanics": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

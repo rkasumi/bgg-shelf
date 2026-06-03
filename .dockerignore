@@ -1,0 +1,12 @@
+.git/
+.github/
+node_modules/
+dist/
+coverage/
+.tmp/
+/data/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
