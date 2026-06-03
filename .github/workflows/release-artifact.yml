@@ -1,0 +1,31 @@
+name: Release Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Artifact version label, for example v0.1.0"
+        required: true
+        default: "dev"
+
+jobs:
+  build-web-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -s --filter @bgg-shelf/web build
+      - name: Package web artifact
+        run: |
+          mkdir -p .release
+          cd apps/web/dist
+          zip -r "../../../.release/bgg-shelf-web-${{ inputs.version }}.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bgg-shelf-web-${{ inputs.version }}
+          path: .release/bgg-shelf-web-${{ inputs.version }}.zip
+          if-no-files-found: error
