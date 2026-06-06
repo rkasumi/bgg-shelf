@@ -6,10 +6,16 @@ on:
       version:
         description: "Artifact version label, for example v0.1.0"
         required: true
-        default: "dev"
+        default: "v0.1.0-dev"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
-  build-web-artifact:
+  release-web-artifact:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,13 +25,34 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm -s --filter @bgg-shelf/web build
+      - name: Resolve release version
+        id: release
+        run: |
+          version="${{ github.event.inputs.version || github.ref_name }}"
+          if [ -z "$version" ]; then
+            echo "version is required" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "asset=bgg-shelf-web-$version.zip" >> "$GITHUB_OUTPUT"
       - name: Package web artifact
         run: |
           mkdir -p .release
           cd apps/web/dist
-          zip -r "../../../.release/bgg-shelf-web-${{ inputs.version }}.zip" .
+          zip -r "../../../.release/${{ steps.release.outputs.asset }}" .
       - uses: actions/upload-artifact@v4
         with:
-          name: bgg-shelf-web-${{ inputs.version }}
-          path: .release/bgg-shelf-web-${{ inputs.version }}.zip
+          name: bgg-shelf-web-${{ steps.release.outputs.version }}
+          path: .release/${{ steps.release.outputs.asset }}
           if-no-files-found: error
+      - name: Publish GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ steps.release.outputs.version }}"
+          asset=".release/${{ steps.release.outputs.asset }}"
+          if gh release view "$version" >/dev/null 2>&1; then
+            gh release upload "$version" "$asset" --clobber
+          else
+            gh release create "$version" "$asset" --title "$version" --notes "Automated static release for $version"
+          fi
