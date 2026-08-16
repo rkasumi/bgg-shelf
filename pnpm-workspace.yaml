@@ -1,6 +1,3 @@
 packages:
   - apps/*
   - jobs/*
-
-overrides:
-  '@napi-rs/wasm-runtime@^1.1.4': 1.1.4
