@@ -1,4 +1,4 @@
-FROM node:24-alpine AS build
+FROM node:24.22.1-alpine AS build
 
 WORKDIR /app
 RUN corepack enable
@@ -10,7 +10,7 @@ RUN pnpm install --frozen-lockfile --filter @bgg-shelf/sync
 COPY jobs/sync jobs/sync
 RUN pnpm --filter @bgg-shelf/sync build
 
-FROM node:24-alpine
+FROM node:24.22.1-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production
