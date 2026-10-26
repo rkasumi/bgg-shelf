@@ -64,7 +64,16 @@ duration, complexity, personal rating, categories, and mechanics. The JSON has
 `schemaVersion: 1`, `generatedAt`, counts, explanatory notes, and games.
 The username, image URLs, and raw status timestamps are omitted.
 
-Previous ownership is not a negative preference: sale reasons are unknown.
+The shared `notes` in `jobs/sync/src/bggShelf/public.ts` define the data and
+owner-provided interpretation rules for all three formats. Keep specific tastes,
+usual player counts, individual evaluations, and disposal reasons in the bot's
+profile, not in this public dataset. Explicit statements from the owner take
+precedence over inferences from the saved BGG registrations. Ownership is a
+positive clue but can include unplayed purchases; previous ownership alone is
+not a negative preference. Registration lag and edition differences can leave
+real-world ownership incompletely represented. Missing ratings are not low
+ratings, and a zero or absent weight means unknown complexity.
+
 Both ownership flags can be true (for example, multiple copies); currently
 owned takes precedence in the displayed sections. Missing values remain unknown.
 The legacy internal field `addedAt` is BGG's status modification timestamp,
@@ -72,8 +81,10 @@ not a purchase or disposal date.
 
 Tell a bot to use the static export as its collection source, check
 `generatedAt`, distinguish current and former ownership, and report retrieval
-failures instead of guessing or fetching BGG. Store the source URL and these
-rules in its preferences rather than treating a remembered list as current.
+failures instead of guessing. Additional BGG requests are normally unnecessary
+for ownership checks; external research about rules, reviews, releases, or edition
+differences remains appropriate when needed. Store the source URL and these rules
+in its preferences rather than treating a remembered list as current.
 
 Public hosting should allow only the three exact paths with GET/HEAD, explicit
 content types, `nosniff`, and a restrictive CSP. Do not expose the output directory
