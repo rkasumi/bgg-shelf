@@ -101,6 +101,9 @@ function compareNullableDateDesc(a: string | null, b: string | null) {
 }
 
 export function scoreGame(game: BggGame, filters: ShelfFilters): ScoredGame | null {
+  if (!game.owned) {
+    return null;
+  }
   if (filters.excludeExpansions && game.isExpansion) {
     return null;
   }

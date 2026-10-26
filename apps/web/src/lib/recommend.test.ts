@@ -22,6 +22,7 @@ const baseGame: BggGame = {
   rank: 100,
   userRating: null,
   owned: true,
+  previouslyOwned: false,
   isExpansion: false,
   categories: ["Card Game"],
   mechanics: ["Deck Building"],
@@ -83,4 +84,8 @@ describe("BGG shelf recommendation", () => {
     expect(recommendGames(games, { ...filters, sort: "name" }).map((game) => game.name)).toEqual(["Alpha", "Bravo", "Charlie"]);
     expect(recommendGames(games, { ...filters, sort: "addedAt" }).map((game) => game.name)).toEqual(["Bravo", "Charlie", "Alpha"]);
   });
+});
+
+it("手放したゲームを今日遊ぶ候補に含めない", () => {
+  expect(recommendGames([{ ...baseGame, owned: false, previouslyOwned: true }], filters)).toEqual([]);
 });

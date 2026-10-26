@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BggCollection, BggGame } from "./types.js";
+import { renderPublicFiles } from "./public.js";
 import { assertBggCollection } from "./validate.js";
 
 type Attrs = Record<string, string>;
@@ -156,6 +157,7 @@ function parseThingXml(xml: string) {
       rank: parseBoardGameRank(ratings),
       userRating: null,
       owned: true,
+      previouslyOwned: false,
       isExpansion: item.attrs.type === "boardgameexpansion",
       categories: links.filter((link) => link.type === "boardgamecategory").map((link) => link.value).filter(Boolean),
       mechanics: links.filter((link) => link.type === "boardgamemechanic").map((link) => link.value).filter(Boolean),
@@ -193,12 +195,13 @@ function parseCollectionXml(xml: string): BggGame[] {
         rank: parseBoardGameRank(ratingBlock),
         userRating: numberOrNull(rating.value),
         owned: status.own === "1",
+        previouslyOwned: status.prevowned === "1",
         isExpansion: item.attrs.subtype === "boardgameexpansion",
         categories: [],
         mechanics: [],
       } satisfies BggGame;
     })
-    .filter((game) => game.id > 0 && game.owned);
+    .filter((game) => game.id > 0 && (game.owned || game.previouslyOwned));
 }
 
 function mergeCollectionWithThings(collectionGames: BggGame[], thingDetails: Map<number, BggGame>) {
@@ -218,6 +221,7 @@ function mergeCollectionWithThings(collectionGames: BggGame[], thingDetails: Map
         userRating: game.userRating,
         addedAt: game.addedAt,
         owned: game.owned,
+        previouslyOwned: game.previouslyOwned,
         isExpansion: game.isExpansion || detail.isExpansion,
       };
     })
@@ -254,6 +258,7 @@ async function fetchXml(url: string, token: string | undefined, fetcher: Fetcher
 }
 
 async function fetchCollectionXml({
+  subtype,
   username,
   token,
   fetcher,
@@ -261,6 +266,7 @@ async function fetchCollectionXml({
   retries,
   requestDelayMs,
 }: {
+  subtype: "boardgame" | "boardgameexpansion";
   username: string;
   token?: string;
   fetcher: Fetcher;
@@ -270,14 +276,19 @@ async function fetchCollectionXml({
 }) {
   const params = new URLSearchParams({
     username,
-    own: "1",
+    subtype,
     stats: "1",
   });
+  if (subtype === "boardgame") params.set("excludesubtype", "boardgameexpansion");
   const url = `${API_BASE}/collection?${params.toString()}`;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     const result = await fetchXml(url, token, fetcher);
     if (!result.pending) {
+      const total = result.xml.match(/<items\b[^>]*totalitems="(\d+)"/);
+      if (!total || /<errors?\b/.test(result.xml) || parseElements(result.xml, "item").length !== Number(total[1])) {
+        throw new Error("BGG returned an invalid collection response");
+      }
       return result.xml;
     }
     if (attempt === retries) {
@@ -310,7 +321,10 @@ async function fetchThingDetails({
       stats: "1",
     });
     const result = await fetchXml(`${API_BASE}/thing?${params.toString()}`, token, fetcher);
-    for (const [id, detail] of parseThingXml(result.xml)) {
+    if (result.pending) throw new Error("BGG thing details are pending");
+    const parsed = parseThingXml(result.xml);
+    if (idChunk.some((id) => !parsed.has(id))) throw new Error("BGG thing details are incomplete");
+    for (const [id, detail] of parsed) {
       details.set(id, detail);
     }
   }
@@ -340,8 +354,22 @@ export async function buildCollection({
   requestDelayMs?: number;
   retries?: number;
 }) {
-  const collectionXml = await fetchCollectionXml({ username, token, fetcher, delay, requestDelayMs, retries });
-  const collectionGames = parseCollectionXml(collectionXml);
+  const byId = new Map<number, BggGame>();
+  for (const subtype of ["boardgame", "boardgameexpansion"] as const) {
+    if (subtype === "boardgameexpansion") await delay(requestDelayMs);
+    const xml = await fetchCollectionXml({ subtype, username, token, fetcher, delay, requestDelayMs, retries });
+    for (const game of parseCollectionXml(xml)) {
+      const existing = byId.get(game.id);
+      // Multiple collection entries can represent different copies of the same game.
+      const preferred = existing?.owned ? existing : game;
+      byId.set(game.id, {
+        ...preferred,
+        owned: game.owned || !!existing?.owned,
+        previouslyOwned: game.previouslyOwned || !!existing?.previouslyOwned,
+      });
+    }
+  }
+  const collectionGames = [...byId.values()];
   const details = await fetchThingDetails({
     ids: collectionGames.map((game) => game.id),
     token,
@@ -376,10 +404,10 @@ export async function runSync({
 
   const resolvedOutputPath = outputPath ?? DEFAULT_OUTPUT;
 
+  let collection: BggCollection;
   try {
-    const collection = await buildCollection({ username, token, fetcher, delay });
-    await writeJson(resolvedOutputPath, collection);
-    return { ok: true, outputPath: resolvedOutputPath, count: collection.games.length, usedCache: false };
+    collection = await buildCollection({ username, token, fetcher, delay });
+    assertBggCollection(collection);
   } catch (error) {
     try {
       await readFile(resolvedOutputPath, "utf8");
@@ -390,6 +418,19 @@ export async function runSync({
       throw error;
     }
   }
+
+  const publicFiles = renderPublicFiles(collection);
+  const publicDir = join(dirname(resolvedOutputPath), "ai");
+  await mkdir(publicDir, { recursive: true });
+  // Stage all formats before replacing any. A disk error must fail the job.
+  for (const [name, contents] of Object.entries(publicFiles)) {
+    await writeFile(join(publicDir, `${name}.tmp`), contents, "utf8");
+  }
+  for (const name of Object.keys(publicFiles)) {
+    await rename(join(publicDir, `${name}.tmp`), join(publicDir, name));
+  }
+  await writeJson(resolvedOutputPath, collection);
+  return { ok: true, outputPath: resolvedOutputPath, count: collection.games.length, usedCache: false };
 }
 
 export const internals = {

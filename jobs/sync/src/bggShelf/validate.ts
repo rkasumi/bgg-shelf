@@ -41,6 +41,7 @@ function isBggGame(value: unknown): value is BggGame {
     isNumberOrNull(game.rank) &&
     isNumberOrNull(game.userRating) &&
     typeof game.owned === "boolean" &&
+    typeof game.previouslyOwned === "boolean" &&
     typeof game.isExpansion === "boolean" &&
     isStringArray(game.categories) &&
     isStringArray(game.mechanics)

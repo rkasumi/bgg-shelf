@@ -20,6 +20,7 @@ const requiredGameKeys = [
   "rank",
   "userRating",
   "owned",
+  "previouslyOwned",
   "isExpansion",
   "categories",
   "mechanics",

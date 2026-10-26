@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { renderPublicFiles } from "../src/bggShelf/public.js";
 import { buildCollection, internals, runSync } from "../src/bggShelf/sync.js";
 
 const collectionXml = `<?xml version="1.0"?>
@@ -62,6 +63,7 @@ const thingXml = `<?xml version="1.0"?>
       </ratings>
     </statistics>
   </item>
+  <item type="boardgameexpansion" id="2"><name type="primary" value="Expansion" /></item>
 </items>`;
 
 test("collection XML is normalized and expansion subtype is preserved", () => {
@@ -110,7 +112,7 @@ test("buildCollection retries 202 collection responses and fetches thing chunks"
   expect(result.sourceUsername).toBe("tester");
   expect(result.games).toHaveLength(2);
   expect(result.games[0].name).toBe("Alpha's Game Deluxe");
-  expect(calls.filter((url) => url.includes("/collection"))).toHaveLength(2);
+  expect(calls.filter((url) => url.includes("/collection"))).toHaveLength(3);
   expect(calls.filter((url) => url.includes("/thing"))).toHaveLength(1);
 });
 
@@ -175,4 +177,92 @@ test("runSync keeps the previous cache if BGG fails", async () => {
 
   expect(result.usedCache).toBe(true);
   expect(await readFile(outputPath, "utf8")).toBe("{\"games\":[]}\n");
+});
+
+const historyXml = `<items totalitems="4">
+  <item objectid="1"><name>Former copy</name><status own="0" prevowned="1" /></item>
+  <item objectid="1"><name>Current copy</name><status own="1" prevowned="0" /><stats><rating value="8" /></stats></item>
+  <item objectid="3"><name>Former game</name><status own="0" prevowned="1" /><stats><rating value="7" /></stats></item>
+  <item objectid="4"><name>Wishlist only</name><status own="0" prevowned="0" wishlist="1" /></item>
+</items>`;
+
+function historyFetcher(url: string | URL | Request) {
+  const parsed = new URL(String(url));
+  if (parsed.pathname.endsWith("/collection")) {
+    return Promise.resolve(new Response(parsed.searchParams.get("subtype") === "boardgameexpansion"
+      ? '<items totalitems="0"></items>' : historyXml));
+  }
+  return Promise.resolve(new Response('<items><item id="1" type="boardgame"><name type="primary" value="Current game" /></item><item id="3" type="boardgame"><name type="primary" value="Former game" /></item></items>'));
+}
+
+test("sync includes previous ownership, merges copies, and excludes wishlist-only games", async () => {
+  const urls: URL[] = [];
+  const result = await buildCollection({ username: "tester", delay: async () => {}, fetcher: (url) => {
+    urls.push(new URL(String(url)));
+    return historyFetcher(url);
+  }});
+  expect(result.games).toHaveLength(2);
+  expect(result.games.find((game) => game.id === 1)).toMatchObject({ owned: true, previouslyOwned: true, userRating: 8 });
+  expect(result.games.find((game) => game.id === 3)).toMatchObject({ owned: false, previouslyOwned: true, userRating: 7 });
+  const queries = urls.filter((url) => url.pathname.endsWith("/collection"));
+  expect(queries.map((url) => url.searchParams.get("subtype"))).toEqual(["boardgame", "boardgameexpansion"]);
+  expect(queries.every((url) => !url.searchParams.has("own"))).toBe(true);
+  expect(queries[0].searchParams.get("excludesubtype")).toBe("boardgameexpansion");
+  expect(urls.find((url) => url.pathname.endsWith("/thing"))?.searchParams.get("id")).toBe("1,3");
+});
+
+test("public exports escape markup and expose only the allowed fields", async () => {
+  const collection = await buildCollection({ username: "private-user", delay: async () => {}, fetcher: historyFetcher });
+  collection.games[0].name = '<script>alert(1)</script> [click](https://evil.test) | unsafe';
+  collection.games[0].image = "https://private.test/image";
+  const files = renderPublicFiles(collection);
+  const data = JSON.parse(files["collection.json"]);
+  expect(data.counts).toEqual({ total: 2, owned: 1, previouslyOwnedOnly: 1 });
+  expect(data.games[0]).not.toHaveProperty("image");
+  expect(data.games[0]).not.toHaveProperty("addedAt");
+  for (const value of Object.values(files)) expect(value).not.toContain("private-user");
+  expect(files["index.html"]).not.toContain("<script>");
+  expect(files["index.html"]).toContain("&lt;script&gt;");
+  expect(files["index.html"]).not.toContain('href="https://evil.test');
+  expect(files["collection.md"]).not.toContain("[click](https://evil.test)");
+  expect(files["collection.md"]).toContain("嫌い・低評価とは判断できません");
+});
+
+test("successful sync writes all static exports; upstream failure preserves them", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bgg-shelf-public-"));
+  const outputPath = join(dir, "collection.json");
+  await runSync({ username: "tester", outputPath, delay: async () => {}, fetcher: historyFetcher });
+  const before = await readFile(join(dir, "ai", "collection.json"), "utf8");
+  const full = JSON.parse(await readFile(outputPath, "utf8"));
+  expect(JSON.parse(before).generatedAt).toBe(full.generatedAt);
+  expect(await readFile(join(dir, "ai", "index.html"), "utf8")).toContain("以前所持していたゲーム（1件）");
+  expect(await readFile(join(dir, "ai", "collection.md"), "utf8")).toContain("Former game");
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const result = await runSync({ username: "tester", outputPath, delay: async () => {}, fetcher: async () => new Response('<errors><error message="Unavailable" /></errors>') });
+    expect(result.usedCache).toBe(true);
+    expect(await readFile(join(dir, "ai", "collection.json"), "utf8")).toBe(before);
+  } finally { console.error = originalError; }
+});
+
+test("incomplete thing details fail instead of publishing an incomplete snapshot", async () => {
+  await expect(buildCollection({ username: "tester", delay: async () => {}, fetcher: async (url) =>
+    String(url).includes("/collection") ? historyFetcher(url) : new Response('<items></items>')
+  })).rejects.toThrow("incomplete");
+});
+
+test("truncated collection XML cannot erase the previous shelf", async () => {
+  await expect(buildCollection({ username: "tester", delay: async () => {}, fetcher: async () =>
+    new Response('<items totalitems="2"><item objectid="1"><name>Truncated</name>')
+  })).rejects.toThrow("invalid collection");
+});
+
+test("disk publication failures are not reported as successful cached syncs", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "bgg-shelf-disk-"));
+  const outputPath = join(dir, "collection.json");
+  await writeFile(outputPath, "previous snapshot");
+  await writeFile(join(dir, "ai"), "not a directory");
+  await expect(runSync({ username: "tester", outputPath, delay: async () => {}, fetcher: historyFetcher })).rejects.toThrow();
+  expect(await readFile(outputPath, "utf8")).toBe("previous snapshot");
 });

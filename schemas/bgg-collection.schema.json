@@ -37,6 +37,7 @@
         "rank",
         "userRating",
         "owned",
+        "previouslyOwned",
         "isExpansion",
         "categories",
         "mechanics"
@@ -67,6 +68,7 @@
         "rank": { "type": ["integer", "null"] },
         "userRating": { "type": ["number", "null"] },
         "owned": { "type": "boolean" },
+        "previouslyOwned": { "type": "boolean" },
         "isExpansion": { "type": "boolean" },
         "categories": {
           "type": "array",

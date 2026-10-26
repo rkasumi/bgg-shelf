@@ -18,6 +18,7 @@ export type BggGame = {
   rank: number | null;
   userRating: number | null;
   owned: boolean;
+  previouslyOwned: boolean;
   isExpansion: boolean;
   categories: string[];
   mechanics: string[];

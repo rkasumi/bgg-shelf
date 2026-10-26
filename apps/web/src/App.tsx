@@ -163,9 +163,11 @@ export default function App() {
           <p className="eyebrow">BoardGameGeek Shelf</p>
           <h1>今日は何を遊ぶ？</h1>
         </div>
-        <a href="/" className="launcher-link">
-          Launcher
-        </a>
+        <nav aria-label="関連ページ">
+          <a href={`${import.meta.env.BASE_URL}ai/`} className="launcher-link">所持・以前所持の一覧</a>
+          {" / "}
+          <a href="/" className="launcher-link">Launcher</a>
+        </nav>
       </header>
 
       <main className="layout">

@@ -22,6 +22,7 @@
       "rank": 120,
       "userRating": null,
       "owned": true,
+      "previouslyOwned": false,
       "isExpansion": false,
       "categories": ["Card Game"],
       "mechanics": ["Deck Building"]
@@ -46,9 +47,35 @@
       "rank": 42,
       "userRating": 8,
       "owned": true,
+      "previouslyOwned": false,
       "isExpansion": false,
       "categories": ["Economic"],
       "mechanics": ["Worker Placement"]
+    },
+    {
+      "id": 3,
+      "name": "Former Sample Game",
+      "addedAt": "2026-05-01T00:00:00+00:00",
+      "yearPublished": 2021,
+      "image": "",
+      "thumbnail": "",
+      "minPlayers": 1,
+      "maxPlayers": 4,
+      "recommendedPlayerCounts": [1, 2, 3],
+      "bestPlayerCounts": [2],
+      "playingTime": 45,
+      "minPlayTime": 30,
+      "maxPlayTime": 60,
+      "weight": 2.2,
+      "averageRating": 7.5,
+      "bayesAverage": 7.0,
+      "rank": 120,
+      "userRating": 7,
+      "owned": false,
+      "previouslyOwned": true,
+      "isExpansion": false,
+      "categories": ["Card Game"],
+      "mechanics": ["Deck Building"]
     }
   ]
 }
