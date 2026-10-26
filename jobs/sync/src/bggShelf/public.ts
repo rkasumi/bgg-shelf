@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { BggCollection, BggGame } from "./types.js";
 
 const notes = [
@@ -68,6 +69,17 @@ export function renderPublicFiles(collection: BggCollection): Record<string, str
   const former = games.filter((game) => !game.owned && game.previouslyOwned);
   const counts = { total: games.length, owned: owned.length, previouslyOwnedOnly: former.length };
   const data = { schemaVersion: 1, generatedAt: collection.generatedAt, counts, notes, games };
+  // Hash only membership and ownership flags, independent of sync time and metadata.
+  const ownership = games.map(({ id, owned, previouslyOwned }) => [id, owned, previouslyOwned] as const)
+    .sort((left, right) => left[0] - right[0]);
+  const meta = {
+    schemaVersion: 1,
+    generatedAt: collection.generatedAt,
+    counts,
+    ownedIds: owned.map((game) => game.id).sort((left, right) => left - right),
+    ownershipHash: `sha256:${createHash("sha256").update(JSON.stringify(ownership)).digest("hex")}`,
+    collectionUrl: "./collection.json",
+  };
   const sections = [{ title: "所持中", games: owned }, { title: "以前所持していたゲーム", games: former }];
   const summary = `更新日時: ${collection.generatedAt} / 所持中: ${counts.owned}件 / 以前所持: ${counts.previouslyOwnedOnly}件`;
   const htmlSections = sections.map((section) => `<section><h2>${section.title}（${section.games.length}件）</h2>
@@ -76,13 +88,14 @@ export function renderPublicFiles(collection: BggCollection): Record<string, str
   const mdSections = sections.map((section) => `## ${section.title}（${section.games.length}件）\n\n| ${headers.join(" | ")} |\n| ${headers.map(() => "---").join(" | ")} |\n${section.games.map((game) => `| ${cells(game).map(markdown).join(" | ")} |`).join("\n")}`).join("\n\n");
   return {
     "collection.json": `${JSON.stringify(data, null, 2)}\n`,
+    "meta.json": `${JSON.stringify(meta)}\n`,
     "collection.md": `# ボードゲーム所持一覧\n\n${summary}\n\n${notes.map((note) => `- ${note}`).join("\n")}\n\n${mdSections}\n`,
     "index.html": `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'">
 <title>ボードゲーム所持一覧</title></head><body><main>
 <h1>ボードゲーム所持一覧</h1><p>${html(summary)}</p>
-<nav><a href="collection.json">JSON</a> / <a href="collection.md">Markdown</a></nav>
+<nav><a href="collection.json">JSON</a> / <a href="collection.md">Markdown</a> / <a href="meta.json">軽量JSON</a></nav>
 <ul>${notes.map((note) => `<li>${html(note)}</li>`).join("\n")}</ul>
 ${htmlSections}</main></body></html>\n`,
   };

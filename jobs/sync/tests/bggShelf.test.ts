@@ -233,8 +233,10 @@ test("successful sync writes all static exports; upstream failure preserves them
   const outputPath = join(dir, "collection.json");
   await runSync({ username: "tester", outputPath, delay: async () => {}, fetcher: historyFetcher });
   const before = await readFile(join(dir, "ai", "collection.json"), "utf8");
+  const beforeMeta = await readFile(join(dir, "ai", "meta.json"), "utf8");
   const full = JSON.parse(await readFile(outputPath, "utf8"));
   expect(JSON.parse(before).generatedAt).toBe(full.generatedAt);
+  expect(JSON.parse(beforeMeta).generatedAt).toBe(full.generatedAt);
   expect(await readFile(join(dir, "ai", "index.html"), "utf8")).toContain("以前所持していたゲーム（1件）");
   expect(await readFile(join(dir, "ai", "collection.md"), "utf8")).toContain("Former game");
   const originalError = console.error;
@@ -243,7 +245,32 @@ test("successful sync writes all static exports; upstream failure preserves them
     const result = await runSync({ username: "tester", outputPath, delay: async () => {}, fetcher: async () => new Response('<errors><error message="Unavailable" /></errors>') });
     expect(result.usedCache).toBe(true);
     expect(await readFile(join(dir, "ai", "collection.json"), "utf8")).toBe(before);
+    expect(await readFile(join(dir, "ai", "meta.json"), "utf8")).toBe(beforeMeta);
   } finally { console.error = originalError; }
+});
+
+test("compact metadata tracks ownership independently of ordering, sync time and game details", async () => {
+  const collection = await buildCollection({ username: "private-user", delay: async () => {}, fetcher: historyFetcher });
+  const metadata = () => JSON.parse(renderPublicFiles(collection)["meta.json"]);
+  const first = metadata();
+  expect(first.ownedIds).toEqual([1]);
+  expect(first.counts).toEqual({ total: 2, owned: 1, previouslyOwnedOnly: 1 });
+  expect(first.collectionUrl).toBe("./collection.json");
+  expect(first.ownershipHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+  expect(first).not.toHaveProperty("games");
+  collection.games.reverse();
+  collection.generatedAt = "2026-10-27T00:00:00Z";
+  collection.games[0].name = "Renamed";
+  collection.games[0].userRating = 10;
+  expect(metadata().ownershipHash).toBe(first.ownershipHash);
+  collection.games[0].owned = true;
+  const acquired = metadata();
+  expect(acquired.ownedIds).toEqual([1, 3]);
+  expect(acquired.ownershipHash).not.toBe(first.ownershipHash);
+  collection.games[0].previouslyOwned = false;
+  expect(metadata().ownershipHash).not.toBe(acquired.ownershipHash);
+  collection.games.pop();
+  expect(metadata().ownedIds).toEqual([3]);
 });
 
 test("incomplete thing details fail instead of publishing an incomplete snapshot", async () => {

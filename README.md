@@ -56,13 +56,26 @@ The web recommendations include only currently owned games.
 ## Static exports for AI readers
 
 Each successful sync also writes `ai/index.html`, `ai/collection.md`, and
-`ai/collection.json` alongside the internal collection file. Serve them at
-`/ai/`, `/ai/collection.md`, and `/ai/collection.json`. They require no JavaScript,
+`ai/collection.json`, plus a compact `ai/meta.json`, alongside the internal
+collection file. Serve them at `/ai/`, `/ai/collection.md`, `/ai/collection.json`,
+and `/ai/meta.json`. They require no JavaScript,
 images, database, API server, MCP server, or additional BGG requests from readers.
-The formats contain separate current/former lists, BGG IDs, player counts,
-duration, complexity, personal rating, categories, and mechanics. The JSON has
+The three detailed formats contain separate current/former lists, BGG IDs, player
+counts, duration, complexity, personal rating, categories, and mechanics. Their JSON has
 `schemaVersion: 1`, `generatedAt`, counts, explanatory notes, and games.
 The username, image URLs, and raw status timestamps are omitted.
+
+`meta.json` contains `schemaVersion`, `generatedAt`, `counts`, sorted `ownedIds`,
+`ownershipHash`, and `collectionUrl` (resolved relative to the metadata URL).
+The hash is SHA-256 of JSON-encoded `[id, owned, previouslyOwned]` tuples sorted
+by numeric ID, including current and former entries. It changes on membership or
+flag changes, not on sync time, names, ratings, or other metadata. It is not a
+hash of the full collection. Use the detailed collection for interpretation notes
+and metadata; an absent ID in `ownedIds` alone does not prove real-world nonownership.
+No purchase/disposal dates or recent-change history are inferred.
+Readers may use conditional GET (`If-None-Match` or `If-Modified-Since`) against
+static-host validators; a 304 reuses the cached body. A fresh sync can change the
+file validator while `ownershipHash` stays unchanged.
 
 The shared `notes` in `jobs/sync/src/bggShelf/public.ts` define the data and
 owner-provided interpretation rules for all three formats. Keep specific tastes,
@@ -86,7 +99,7 @@ for ownership checks; external research about rules, reviews, releases, or editi
 differences remains appropriate when needed. Store the source URL and these rules
 in its preferences rather than treating a remembered list as current.
 
-Public hosting should allow only the three exact paths with GET/HEAD, explicit
+Public hosting should allow only the four exact paths with GET/HEAD, explicit
 content types, `nosniff`, and a restrictive CSP. Do not expose the output directory
 or `.tmp` files. Keep other routes behind existing authentication if desired.
 All external strings are escaped in HTML and Markdown; JSON uses an explicit
