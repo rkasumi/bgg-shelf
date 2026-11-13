@@ -24,4 +24,4 @@ COPY --from=build /app/jobs/sync/dist ./dist
 
 USER node
 
-CMD ["node", "/app/dist/bggShelf/sync.js"]
+CMD ["node", "/app/dist/bggShelf/syncAll.js"]

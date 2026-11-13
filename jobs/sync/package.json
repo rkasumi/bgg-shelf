@@ -7,7 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "sync:bgg-shelf": "pnpm build && node dist/bggShelf/sync.js"
+    "sync:bgg-shelf": "pnpm build && node dist/bggShelf/syncAll.js",
+    "sync:hotness": "pnpm build && node dist/bggShelf/hotness.js"
   },
   "engines": {
     "node": ">=24"

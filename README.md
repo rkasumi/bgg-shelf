@@ -99,7 +99,7 @@ for ownership checks; external research about rules, reviews, releases, or editi
 differences remains appropriate when needed. Store the source URL and these rules
 in its preferences rather than treating a remembered list as current.
 
-Public hosting should allow only the four exact paths with GET/HEAD, explicit
+Public hosting should allow only the four collection paths above with GET/HEAD, explicit
 content types, `nosniff`, and a restrictive CSP. Do not expose the output directory
 or `.tmp` files. Keep other routes behind existing authentication if desired.
 All external strings are escaped in HTML and Markdown; JSON uses an explicit
@@ -112,6 +112,55 @@ must compare `generatedAt` and retry on a mismatch. A short public cache (for
 example, five minutes) reduces origin load. BGG history becomes available only
 after the updated job completes a successful sync. Old web readers must be
 updated to exclude `owned=false` before that sync is enabled.
+
+## Hotness exports
+
+`sync:bgg-shelf` and the container's default command update both the collection
+and BoardGameGeek Hotness, sequentially with `BGG_REQUEST_DELAY_MS` between them.
+Each dataset is attempted even if the other fails. They have independent
+timestamps and caches; failure without a previous snapshot fails the job.
+Hotness upstream failures keep all previous formats and their original timestamp;
+disk publication errors fail the job. Replacements are atomic per file, so readers
+combining formats must compare `generatedAt` and retry on a mismatch.
+
+To update only Hotness (no BGG username required), run from `jobs/sync`:
+
+```bash
+DATA_DIR=/tmp/bgg-shelf pnpm sync:hotness
+```
+
+The job requests `/xmlapi2/hot?type=boardgame` once using the existing `BGG_TOKEN`
+bearer authentication and `BGG_API_BASE` override, if configured. The output is
+`DATA_DIR/ai/hotness/index.html`, `hotness.md`, and `hotness.json`.
+Unlike collection output, this directory is independent of `BGG_OUTPUT_PATH`.
+JSON contains `schemaVersion: 1`, `generatedAt`, `source`, `notes`, and `games`.
+Each game has `id`, `rank` (Hotness rank, not overall BGG rank), `name`, and
+nullable `yearPublished`. Games are ordered by rank. No ownership, usernames,
+tokens, thumbnail URLs, ranking history, or inferred reasons for popularity are
+included. The full returned list is retained, including games outside the collection.
+
+Grok bot / Muse should read `/ai/hotness/` (plain HTML without JavaScript),
+`/ai/hotness/hotness.md`, or `/ai/hotness/hotness.json`, report `generatedAt`, and
+join the collection by BGG ID when asked about ownership. Neither missing entries
+nor failed retrievals establish a current rank. No direct BGG access is needed
+by the reader. Actual retrieval from Grok bot / Muse must be verified after deployment.
+
+Public hosting must explicitly allow these three Hotness paths with GET/HEAD,
+correct content types, `nosniff`, and the HTML CSP. Do not expose the directory,
+temporary files, or other data paths. A short cache such as five minutes is suitable;
+the sync frequency is configured separately in private ops. Hotness is not linked
+from the collection page, so the existing collection paths work before Hotness
+hosting is enabled. Provision an official, legibly sized **Powered by BGG** logo
+as `/ai/hotness/powered-by-bgg.png` (also an explicit GET/HEAD allowlist entry);
+the HTML links it back to BGG and permits only same-origin images.
+
+Before public deployment, verify the registered application's permitted use against
+[BGG's API guide](https://boardgamegeek.com/using_the_xml_api) and
+[XML API terms](https://boardgamegeek.com/wiki/page/XML_API_Terms_of_Use).
+The guide prohibits third-party services providing BGG data to other applications;
+whether the intended bot readers are permitted needs confirmation from BGG.
+Public use requires the official linked logo; AI/LLM training using this data is
+prohibited. Public hosting, scheduling, and production changes remain in private ops.
 
 Do not commit real collection JSON, BGG usernames, tokens, generated cache, `.env` files, production paths, or deployment host details.
 

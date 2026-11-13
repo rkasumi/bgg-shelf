@@ -37,13 +37,13 @@ function publicGame(game: BggGame) {
   };
 }
 
-function html(value: unknown) {
+export function html(value: unknown) {
   return String(value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[char]!);
 }
 
-function markdown(value: unknown) {
+export function markdown(value: unknown) {
   return html(value).replace(/[\\`*_[\]{}()#+.!|~-]/g, "\\$&").replace(/[\r\n]+/g, " ");
 }
 

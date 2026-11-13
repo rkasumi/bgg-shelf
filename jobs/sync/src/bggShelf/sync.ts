@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { sleep, parseElements, openingAttrs, firstOpeningAttrs, firstText, fetchXml, type Fetcher, type Delay } from "./api.js";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,69 +7,12 @@ import type { BggCollection, BggGame } from "./types.js";
 import { renderPublicFiles } from "./public.js";
 import { assertBggCollection } from "./validate.js";
 
-type Attrs = Record<string, string>;
-type XmlElement = {
-  attrs: Attrs;
-  inner: string;
-};
-type Fetcher = typeof fetch;
-type Delay = (ms: number) => Promise<void>;
-
 const API_BASE = process.env.BGG_API_BASE ?? "https://boardgamegeek.com/xmlapi2";
 const DATA_DIR = process.env.DATA_DIR ?? "/data";
 const DEFAULT_OUTPUT = process.env.BGG_OUTPUT_PATH ?? join(DATA_DIR, "collection.json");
 const REQUEST_DELAY_MS = Number(process.env.BGG_REQUEST_DELAY_MS ?? 5000);
 const COLLECTION_RETRIES = Number(process.env.BGG_COLLECTION_RETRIES ?? 8);
 const THING_CHUNK_SIZE = 20;
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function decodeXml(value = "") {
-  return value
-    .replaceAll(/&#(\d+);/g, (_, codepoint: string) => String.fromCodePoint(Number(codepoint)))
-    .replaceAll(/&#x([0-9a-f]+);/gi, (_, codepoint: string) => String.fromCodePoint(Number.parseInt(codepoint, 16)))
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", "\"")
-    .replaceAll("&apos;", "'");
-}
-
-function parseAttrs(attrs = "") {
-  const result: Attrs = {};
-  const attrPattern = /([\w:-]+)="([^"]*)"/g;
-  for (const match of attrs.matchAll(attrPattern)) {
-    result[match[1]] = decodeXml(match[2]);
-  }
-  return result;
-}
-
-function parseElements(xml: string, tagName: string): XmlElement[] {
-  const pattern = new RegExp(`<${tagName}\\b([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, "g");
-  return [...xml.matchAll(pattern)].map((match) => ({
-    attrs: parseAttrs(match[1]),
-    inner: match[2],
-  }));
-}
-
-function openingAttrs(xml: string, tagName: string) {
-  const pattern = new RegExp(`<${tagName}\\b([^>]*?)(?:\\/?>)`, "g");
-  return [...xml.matchAll(pattern)].map((match) => parseAttrs(match[1]));
-}
-
-function firstOpeningAttrs(xml: string, tagName: string) {
-  return openingAttrs(xml, tagName)[0] ?? {};
-}
-
-function firstText(xml: string, tagName: string) {
-  const pattern = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`);
-  const match = xml.match(pattern);
-  return match ? decodeXml(match[1].trim()) : "";
-}
 
 function numberOrNull(value: string | undefined | null) {
   if (value === undefined || value === null || value === "" || value === "N/A" || value === "Not Ranked") {
@@ -234,27 +178,6 @@ function chunk<T>(items: T[], size: number) {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
-}
-
-async function fetchXml(url: string, token: string | undefined, fetcher: Fetcher) {
-  const headers: Record<string, string> = {
-    "User-Agent": "personal-data-jobs-bgg-shelf/1.0",
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetcher(url, { headers });
-
-  if (response.status === 202) {
-    return { pending: true, xml: "" };
-  }
-
-  if (!response.ok) {
-    throw new Error(`BGG request failed: ${response.status} ${response.statusText}`);
-  }
-
-  return { pending: false, xml: await response.text() };
 }
 
 async function fetchCollectionXml({
